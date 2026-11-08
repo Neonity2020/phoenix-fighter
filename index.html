@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>凤凰战机 - PHOENIX FIGHTER</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#030712;font-family:'Courier New',monospace;color:#fff;user-select:none;-webkit-user-select:none}
+  #wrap{position:relative;width:100%;height:100%;display:flex;flex-direction:column}
+  canvas{flex:1;width:100%;display:block;background:radial-gradient(ellipse at center,#0f172a 0%,#030712 70%);touch-action:none}
+  #hud{position:absolute;top:0;left:0;right:0;display:flex;justify-content:space-between;padding:14px 18px;pointer-events:none;z-index:5}
+  #hud .box{background:rgba(8,145,178,.15);border:1px solid rgba(34,211,238,.5);border-radius:8px;padding:6px 14px;backdrop-filter:blur(4px)}
+  #hud b{color:#22d3ee;font-size:11px;letter-spacing:2px;display:block}
+  #hud span{font-size:20px;font-weight:900;color:#fde047;text-shadow:0 0 8px #facc15}
+  #lives span{color:#fb7185;text-shadow:0 0 8px #f43f5e;font-size:18px}
+  #overlay,#startScreen,#pauseScreen,#gameOver{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(2,6,23,.85);backdrop-filter:blur(6px);z-index:10;text-align:center;padding:20px}
+  .hidden{display:none!important}
+  h1{font-size:clamp(38px,8vw,72px);font-weight:900;letter-spacing:6px;background:linear-gradient(90deg,#22d3ee,#f472b6,#facc15,#22d3ee);background-size:300% 100%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;animation:shimmer 3s linear infinite;filter:drop-shadow(0 0 20px rgba(34,211,238,.6))}
+  @keyframes shimmer{0%{background-position:0% 50%}100%{background-position:300% 50%}}
+  .sub{color:#94a3b8;letter-spacing:3px;margin:8px 0 20px;font-size:13px}
+  .btn{pointer-events:auto;cursor:pointer;background:linear-gradient(135deg,#0891b2,#db2777);border:2px solid #22d3ee;color:#fff;padding:14px 42px;font-size:20px;font-weight:900;letter-spacing:4px;border-radius:50px;margin:8px;transition:.2s;box-shadow:0 0 20px rgba(34,211,238,.5);font-family:inherit}
+  .btn:hover{transform:scale(1.06);box-shadow:0 0 35px rgba(219,39,119,.7)}
+  .btn:active{transform:scale(.96)}
+  .ctrl{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin:16px 0;color:#cbd5e1;font-size:13px;line-height:1.8}
+  .ctrl kbd{background:#1e293b;border:1px solid #475569;border-bottom:3px solid #475569;border-radius:5px;padding:2px 8px;color:#fde047;font-weight:bold}
+  #bossBarWrap{position:absolute;top:70px;left:50%;transform:translateX(-50%);width:min(600px,80%);display:none;z-index:6}
+  #bossBar{height:14px;background:#1e293b;border:1px solid #ef4444;border-radius:99px;overflow:hidden}
+  #bossFill{height:100%;width:100%;background:linear-gradient(90deg,#ef4444,#f97316);transition:width .15s;box-shadow:0 0 12px #ef4444}
+  #bossLabel{text-align:center;color:#fca5a5;font-size:11px;letter-spacing:3px;margin-bottom:4px}
+  #toast{position:absolute;top:110px;left:50%;transform:translateX(-50%);font-size:22px;font-weight:900;letter-spacing:4px;color:#fde047;text-shadow:0 0 15px #f97316;opacity:0;transition:.3s;z-index:7;pointer-events:none}
+  #toast.show{opacity:1;transform:translateX(-50%) scale(1.1)}
+  .scoreBig{font-size:42px;color:#fde047;font-weight:900;text-shadow:0 0 20px #facc15}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div class="box"><b>SCORE 得分</b><span id="score">0</span></div>
+    <div class="box"><b>LEVEL 关卡 · HI <span id="hi" style="font-size:12px;color:#fff">0</span></b><span id="level">1</span></div>
+    <div class="box" id="lives"><b>LIVES 生命</b><span id="lifeTxt">♥♥♥</span></div>
+    <div class="box"><b>POWER 火力</b><span id="power">Lv1</span></div>
+  </div>
+  <div id="bossBarWrap"><div id="bossLabel">⚠ BOSS - 毁灭母舰 ⚠</div><div id="bossBar"><div id="bossFill"></div></div></div>
+  <div id="toast"></div>
+
+  <div id="startScreen">
+    <div style="font-size:52px">🔥</div>
+    <h1>凤凰战机</h1>
+    <div class="sub">PHOENIX FIGHTER · 街机空战</div>
+    <div class="ctrl">
+      <div><kbd>W A S D</kbd> / <kbd>←↑↓→</kbd> 移动战机</div>
+      <div><kbd>空格</kbd> 射击（可自动射击）</div>
+      <div><kbd>P</kbd> 暂停 · <kbd>M</kbd> 静音</div>
+      <div>📱 触摸拖动移动 · 自动射击</div>
+    </div>
+    <div style="color:#94a3b8;font-size:13px;max-width:520px;line-height:1.9">
+      击坠敌机获得能量道具 <span style="color:#f472b6;font-weight:bold">P=火力强化</span> <span style="color:#22d3ee;font-weight:bold">S=能量护盾</span> <span style="color:#facc15;font-weight:bold">★=生命</span> <span style="color:#a3e635;font-weight:bold">B=凤凰炸弹</span><br>
+      连续击杀积累连击 COMBO，分数倍增！每关末尾迎战 Boss！
+    </div>
+    <button class="btn" id="startBtn">▶ 开始战斗</button>
+    <div style="color:#475569;font-size:11px;margin-top:10px">双击屏幕全屏 · 建议佩戴耳机体验音效</div>
+  </div>
+
+  <div id="pauseScreen" class="hidden">
+    <h1 style="font-size:42px">已暂停</h1>
+    <button class="btn" id="resumeBtn">继续战斗</button>
+    <button class="btn" id="restartBtn2">重新开始</button>
+  </div>
+
+  <div id="gameOver" class="hidden">
+    <div style="font-size:44px">💥</div>
+    <h1 style="font-size:44px;color:#fb7185;background:none;-webkit-text-fill-color:#fb7185">战机坠毁</h1>
+    <div class="sub">MISSION FAILED</div>
+    <div class="scoreBig" id="finalScore">0</div>
+    <div id="newRecord" style="color:#facc15;margin:6px" class="hidden">🏆 新纪录！</div>
+    <div style="color:#94a3b8">击坠战机 <span id="finalKills" style="color:#fff">0</span> · 最高连击 <span id="finalCombo" style="color:#fff">0</span></div>
+    <button class="btn" id="restartBtn" style="margin-top:20px">↺ 再次出击</button>
+  </div>
+</div>
+
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+let W,H,DPR=Math.min(devicePixelRatio||1,2);
+function resize(){W=canvas.clientWidth;H=canvas.clientHeight;canvas.width=W*DPR;canvas.height=H*DPR;ctx.setTransform(DPR,0,0,DPR,0,0)}
+addEventListener('resize',resize);
+
+const $=id=>document.getElementById(id);
+const rand=(a,b)=>a+Math.random()*(b-a);
+
+// Audio
+let AC=null,muted=false;
+function beep(f,d,type='square',v=0.08,slide=0){if(muted)return;try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();let o=AC.createOscillator(),g=AC.createGain();o.type=type;o.frequency.setValueAtTime(f,AC.currentTime);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(20,f+slide),AC.currentTime+d);g.gain.setValueAtTime(v,AC.currentTime);g.gain.exponentialRampToValueAtTime(0.001,AC.currentTime+d);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+d)}catch(e){}}
+function sShoot(){beep(880,0.08,'square',0.03,-600)} function sHit(){beep(200,0.15,'sawtooth',0.06,-150)} function sBoom(){beep(120,0.4,'sawtooth',0.12,-90)} function sPick(){beep(660,0.12,'sine',0.08,400)} function sBomb(){beep(60,0.6,'sawtooth',0.15,200)}
+
+// State
+let state='menu',score=0,hi=+localStorage.getItem('phoenix_hi')||0,level=1,lives=3,kills=0,combo=0,maxCombo=0,comboTimer=0,shake=0,flash=0,time=0;
+let player,bullets,ebullets,enemies,parts,powerups,stars,boss,bossSpawned,waveTimer,fireCd,invuln;
+$('hi').textContent=hi;
+
+function reset(){
+  score=0;level=1;lives=3;kills=0;combo=0;maxCombo=0;comboTimer=0;shake=0;flash=0;time=0;boss=null;bossSpawned=false;waveTimer=0;fireCd=0;invuln=0;
+  player={x:W/2,y:H-120,r:16,speed:380,power:1,shield:0,invuln:0,alive:true,tilt:0};
+  bullets=[];ebullets=[];enemies=[];parts=[];powerups=[];
+  stars=Array.from({length:90},()=>({x:Math.random()*2000,y:Math.random()*2000,s:rand(.5,2.5),v:rand(40,200)}));
+  updateHUD();
+}
+function updateHUD(){$('score').textContent=score.toLocaleString();$('level').textContent=level;$('lifeTxt').textContent='♥'.repeat(Math.max(0,lives))||'—';$('power').textContent='Lv'+player.power+(player.shield>0?' 🛡':'')}
+function toast(t){let el=$('toast');el.textContent=t;el.classList.add('show');setTimeout(()=>el.classList.remove('show'),1400)}
+
+keys={};addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='Space')e.preventDefault();if(e.code==='KeyP'&&state==='play')pauseGame();else if(e.code==='KeyP'&&state==='pause')resumeGame();if(e.code==='KeyM'){muted=!muted;toast(muted?'🔇 已静音':'🔊 声音开启')}});
+addEventListener('keyup',e=>keys[e.code]=false);
+
+// Touch / mouse control
+let touchTarget=null;
+function pointerPos(e){let r=canvas.getBoundingClientRect();let t=e.touches?e.touches[0]:e;return{x:t.clientX-r.left,y:t.clientY-r.top}}
+canvas.addEventListener('pointerdown',e=>{touchTarget=pointerPos(e);canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{if(touchTarget)touchTarget=pointerPos(e)});
+canvas.addEventListener('pointerup',()=>touchTarget=null);
+canvas.addEventListener('pointercancel',()=>touchTarget=null);
+
+function addPart(x,y,n,color,sp=260){for(let i=0;i<n;i++){let a=Math.random()*Math.PI*2,s=rand(.3,1)*sp;parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(.3,.8),max:.8,color,r:rand(1,3.5)})}}
+function boom(x,y,big){addPart(x,y,big?60:22,big?'#f97316':'#facc15',big?420:300);addPart(x,y,big?30:12,'#ef4444',250);shake=Math.min(14,shake+(big?10:3));sBoom()}
+function spawnEnemy(){
+  let type=Math.random();
+  let e;
+  if(type<0.45)e={x:rand(30,W-30),y:-30,r:15,hp:1,vy:rand(90,150),vx:0,kind:'small',score:100,color:'#f472b6'};
+  else if(type<0.75)e={x:rand(40,W-40),y:-30,r:16,hp:2,vy:rand(70,100),vx:rand(-60,60),kind:'zig',score:200,color:'#c084fc',t:0};
+  else if(type<0.92)e={x:rand(40,W-40),y:-40,r:22,hp:5,vy:rand(45,65),vx:0,kind:'tank',score:400,color:'#fb923c',shoot:rand(1,2)};
+  else e={x:rand(40,W-40),y:-30,r:14,hp:1,vy:rand(160,220),vx:0,kind:'dart',score:150,color:'#22d3ee'};
+  e.maxhp=e.hp;enemies.push(e);
+}
+function spawnBoss(){
+  boss={x:W/2,y:-80,r:52,hp:120+level*40,maxhp:120+level*40,vy:55,t:0,shoot:0};
+  bossSpawned=true;$('bossBarWrap').style.display='block';toast('⚠ 警告：BOSS 接近中 ⚠');beep(110,0.5,'sawtooth',0.12,50);setTimeout(()=>beep(110,0.5,'sawtooth',0.12,50),600);
+}
+function spawnPowerup(x,y){
+  let r=Math.random();
+  let kind=r<0.45?'P':r<0.7?'S':r<0.87?'★':'B';
+  powerups.push({x,y,vy:110,kind,r:14,t:0});
+}
+function fire(){
+  let pl=player, lv=player.power;
+  if(lv===1)bullets.push({x:pl.x,y:pl.y-18,vy:-620,r:4});
+  else if(lv===2){bullets.push({x:pl.x-7,y:pl.y-14,vy:-620,r:4});bullets.push({x:pl.x+7,y:pl.y-14,vy:-620,r:4})}
+  else if(lv===3){bullets.push({x:pl.x,y:pl.y-20,vy:-660,r:5});bullets.push({x:pl.x-12,y:pl.y-10,vy:-620,r:4});bullets.push({x:pl.x+12,y:pl.y-10,vy:-620,r:4})}
+  else {bullets.push({x:pl.x,y:pl.y-22,vy:-700,r:5});bullets.push({x:pl.x-14,y:pl.y-12,vy:-640,r:4});bullets.push({x:pl.x+14,y:pl.y-12,vy:-640,r:4});bullets.push({x:pl.x-7,y:pl.y-18,vy:-680,r:4,vx:-60});bullets.push({x:pl.x+7,y:pl.y-18,vy:-680,r:4,vx:60})}
+  if(Math.random()<0.5)sShoot();
+}
+function explodeBomb(){
+  sBomb();flash=1;shake=16;score+=1000;
+  enemies.forEach(e=>{if(Math.hypot(e.x-player.x,e.y-player.y)<380){e.hp=0;boom(e.x,e.y)}});enemies=enemies.filter(e=>e.hp>0);
+  if(boss){boss.hp-=30;boom(boss.x,boss.y,true)}
+  ebullets=[];toast('💥 凤凰炸弹！');
+}
+
+function hurtPlayer(){
+  if(player.invuln>0||invuln>0)return;
+  if(player.shield>0){player.shield--;invuln=1;beep(300,0.2,'sine',0.1,200);addPart(player.x,player.y,14,'#22d3ee',200);updateHUD();return}
+  lives--;combo=0;invuln=2;shake=12;boom(player.x,player.y,true);updateHUD();
+  if(lives<=0)gameOver();
+}
+function gameOver(){
+  state='over';boom(player.x,player.y,true);player.alive=false;
+  if(score>hi){hi=score;localStorage.setItem('phoenix_hi',hi);$('newRecord').classList.remove('hidden')}else $('newRecord').classList.add('hidden');
+  $('finalScore').textContent=score.toLocaleString();$('finalKills').textContent=kills;$('finalCombo').textContent='x'+maxCombo;$('hi').textContent=hi;
+  setTimeout(()=>{$('gameOver').classList.remove('hidden')},900);
+}
+function startGame(){resize();reset();state='play';$('startScreen').classList.add('hidden');$('gameOver').classList.add('hidden');$('pauseScreen').classList.add('hidden');$('bossBarWrap').style.display='none';toast('🔥 凤凰出击！自动射击已开启')}
+function pauseGame(){state='pause';$('pauseScreen').classList.remove('hidden')}
+function resumeGame(){state='play';$('pauseScreen').classList.add('hidden')}
+
+$('startBtn').onclick=startGame;$('restartBtn').onclick=startGame;$('restartBtn2').onclick=startGame;$('resumeBtn').onclick=resumeGame;
+canvas.addEventListener('dblclick',()=>{if(document.fullscreenElement)document.exitFullscreen();else document.documentElement.requestFullscreen().catch(()=>{})});
+
+// Draw helpers
+function drawPlayer(){
+  let p=player;if(!p.alive)return;
+  if(p.invuln>0&&Math.floor(time*12)%2===0)return;
+  ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.tilt);
+  // engine flame
+  let fl=14+Math.sin(time*30)*6;
+  let g=ctx.createLinearGradient(0,10,0,10+fl+14);g.addColorStop(0,'#fde047');g.addColorStop(0.5,'#f97316');g.addColorStop(1,'transparent');
+  ctx.fillStyle=g;ctx.beginPath();ctx.moveTo(-6,12);ctx.lineTo(0,12+fl+12);ctx.lineTo(6,12);ctx.closePath();ctx.fill();
+  // body phoenix
+  ctx.shadowBlur=18;ctx.shadowColor='#22d3ee';
+  ctx.fillStyle='#0ea5e9';ctx.strokeStyle='#a5f3fc';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,-22);ctx.lineTo(6,-6);ctx.lineTo(22,10);ctx.lineTo(12,12);ctx.lineTo(7,8);ctx.lineTo(5,14);ctx.lineTo(-5,14);ctx.lineTo(-7,8);ctx.lineTo(-12,12);ctx.lineTo(-22,10);ctx.lineTo(-6,-6);ctx.closePath();ctx.fill();ctx.stroke();
+  // wings gradient
+  ctx.fillStyle='rgba(244,114,182,.85)';ctx.beginPath();ctx.moveTo(0,-22);ctx.lineTo(6,-6);ctx.lineTo(22,10);ctx.lineTo(10,6);ctx.closePath();ctx.fill();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(0,-10,3,0,7);ctx.fill();
+  ctx.restore();
+  if(p.shield>0){ctx.strokeStyle='rgba(34,211,238,.8)';ctx.shadowBlur=12;ctx.shadowColor='#22d3ee';ctx.lineWidth=2;ctx.beginPath();ctx.arc(p.x,p.y,28+Math.sin(time*4)*2,0,7);ctx.stroke()}
+}
+function drawEnemy(e){
+  ctx.save();ctx.translate(e.x,e.y);ctx.shadowBlur=12;ctx.shadowColor=e.color;
+  ctx.fillStyle=e.color;ctx.strokeStyle='#fff';ctx.lineWidth=1.5;
+  if(e.kind==='small'){ctx.beginPath();ctx.moveTo(0,16);ctx.lineTo(13,-10);ctx.lineTo(0,-6);ctx.lineTo(-13,-10);ctx.closePath()}
+  else if(e.kind==='zig'){ctx.beginPath();ctx.moveTo(0,16);ctx.lineTo(16,0);ctx.lineTo(8,-12);ctx.lineTo(-8,-12);ctx.lineTo(-16,0);ctx.closePath()}
+  else if(e.kind==='tank'){ctx.fillRect(-20,-14,40,28);ctx.fillRect(-10,10,20,10);ctx.fillStyle='#fff';ctx.fillRect(-6,-6,12,12)}
+  else{ctx.beginPath();ctx.moveTo(0,18);ctx.lineTo(8,-12);ctx.lineTo(-8,-12);ctx.closePath()}
+  ctx.fill();ctx.stroke();ctx.restore();
+  if(e.maxhp>1){ctx.fillStyle='#1e293b';ctx.fillRect(e.x-16,e.y-e.r-10,32,4);ctx.fillStyle=e.color;ctx.fillRect(e.x-16,e.y-e.r-10,32*e.hp/e.maxhp,4)}
+}
+function drawBoss(){
+  if(!boss)return;ctx.save();ctx.translate(boss.x,boss.y);ctx.shadowBlur=25;ctx.shadowColor='#ef4444';
+  ctx.fillStyle='#7f1d1d';ctx.strokeStyle='#fca5a5';ctx.lineWidth=3;
+  ctx.beginPath();ctx.moveTo(-70,0);ctx.lineTo(-40,-35);ctx.lineTo(40,-35);ctx.lineTo(70,0);ctx.lineTo(45,30);ctx.lineTo(-45,30);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle='#ef4444';ctx.fillRect(-30,-18,60,22);
+  ctx.fillStyle='#fde047';ctx.beginPath();ctx.arc(0,-7,10+Math.sin(time*5)*2,0,7);ctx.fill();
+  ctx.fillStyle='#fca5a5';ctx.fillRect(-60,-5,18,10);ctx.fillRect(42,-5,18,10);
+  ctx.restore();
+  $('bossFill').style.width=Math.max(0,boss.hp/boss.maxhp*100)+'%';
+}
+
+let last=performance.now();
+function loop(now){
+  requestAnimationFrame(loop);
+  let dt=Math.min(0.033,(now-last)/1000);last=now;
+  // background always
+  ctx.fillStyle=flash>0?`rgba(255,200,100,${flash*0.35})`:'#030712';ctx.fillRect(0,0,W,H);
+  if(flash>0)flash-=dt*2;
+  ctx.save();
+  if(shake>0){ctx.translate(rand(-shake,shake),rand(-shake,shake));shake*=0.88;if(shake<0.3)shake=0}
+  // stars
+  if(!stars)stars=[];
+  ctx.fillStyle='#fff';
+  stars.forEach(s=>{s.y+=s.v*dt*(state==='play'?1.6:0.5);if(s.y>H){s.y=0;s.x=Math.random()*W}ctx.globalAlpha=0.4+Math.sin(time*3+s.x)*0.3;ctx.fillRect(s.x,s.y,s.s,s.s*2)});
+  ctx.globalAlpha=1;
+  // nebula
+  let ng=ctx.createRadialGradient(W*0.2,H*0.3,10,W*0.2,H*0.3,300);ng.addColorStop(0,'rgba(219,39,119,0.12)');ng.addColorStop(1,'transparent');ctx.fillStyle=ng;ctx.fillRect(0,0,W,H);
+  let ng2=ctx.createRadialGradient(W*0.85,H*0.6,10,W*0.85,H*0.6,350);ng2.addColorStop(0,'rgba(34,211,238,0.12)');ng2.addColorStop(1,'transparent');ctx.fillStyle=ng2;ctx.fillRect(0,0,W,H);
+
+  if(state==='play'||state==='pause'||state==='over'){
+    if(state==='play'){
+      time+=dt;
+      // movement
+      let p=player,mx=0,my=0;
+      if(keys['KeyA']||keys['ArrowLeft'])mx-=1;if(keys['KeyD']||keys['ArrowRight'])mx+=1;
+      if(keys['KeyW']||keys['ArrowUp'])my-=1;if(keys['KeyS']||keys['ArrowDown'])my+=1;
+      if(mx||my){let l=Math.hypot(mx,my);p.x+=mx/l*p.speed*dt;p.y+=my/l*p.speed*dt;p.tilt=mx*0.22}else if(touchTarget){let dx=touchTarget.x-p.x,dy=touchTarget.y-p.y,d=Math.hypot(dx,dy);if(d>4){p.x+=dx/d*Math.min(p.speed*1.4,d*8)*dt;p.y+=dy/d*Math.min(p.speed*1.4,d*8)*dt;p.tilt=dx*0.004}}
+      else p.tilt*=0.85;
+      p.x=Math.max(18,Math.min(W-18,p.x));p.y=Math.max(60,Math.min(H-30,p.y));
+      if(p.invuln>0)p.invuln-=dt;if(invuln>0)invuln-=dt;
+      // auto fire + space
+      fireCd-=dt;if(fireCd<=0){fire();fireCd=0.13}
+      if(keys['KeyB']&&!p._bUsed){explodeBomb();p._bUsed=true;setTimeout(()=>p._bUsed=false,1000)}
+      // waves
+      waveTimer-=dt;
+      if(!boss&&waveTimer<=0){if(!bossSpawned&&level>=1&&kills>0&&kills%18===0){spawnBoss()}else{spawnEnemy();if(Math.random()<0.3)spawnEnemy()}waveTimer=Math.max(0.35,0.9-level*0.05)}
+      // enemies move
+      enemies.forEach(e=>{
+        e.y+=e.vy*dt;
+        if(e.kind==='zig'){e.t+=dt*3;e.x+=Math.sin(e.t)*140*dt;e.x+=e.vx*dt*0.3}
+        if(e.kind==='tank'){e.shoot-=dt;if(e.shoot<=0&&e.y>0&&e.y<H*0.6){ebullets.push({x:e.x,y:e.y+18,vy:180,r:5});e.shoot=rand(1.2,2.2)}}
+      });
+      enemies=enemies.filter(e=>e.y<H+50);
+      // boss
+      if(boss){
+        if(boss.y<110)boss.y+=boss.vy*dt;else boss.x=W/2+Math.sin(time*0.7)*W*0.28;
+        boss.shoot-=dt;
+        if(boss.shoot<=0){boss.shoot=0.55;for(let i=-1;i<=1;i++)ebullets.push({x:boss.x+i*30,y:boss.y+30,vy:210,vx:i*55,r:5});ebullets.push({x:boss.x-50,y:boss.y+10,vy:190,vx:-30,r:5});ebullets.push({x:boss.x+50,y:boss.y+10,vy:190,vx:30,r:5})}
+        if(boss.hp<=0){boom(boss.x,boss.y,true);score+=5000;kills++;boss=null;bossSpawned=false;$('bossBarWrap').style.display='none';level++;toast('🎉 BOSS 击坠！进入第 '+level+' 关');waveTimer=1;updateHUD()}
+      }
+      // bullets
+      bullets.forEach(b=>{b.x+=(b.vx||0)*dt;b.y+=b.vy*dt});
+      bullets=bullets.filter(b=>b.y>-20&&b.x>-10&&b.x<W+10);
+      ebullets.forEach(b=>{b.x+=(b.vx||0)*dt;b.y+=b.vy*dt});
+      ebullets=ebullets.filter(b=>b.y<H+20);
+      // collisions bullet->enemy/boss
+      bullets.forEach(b=>{
+        enemies.forEach(e=>{if(!b.dead&&Math.hypot(b.x-e.x,b.y-e.y)<e.r+b.r){b.dead=true;e.hp--;sHit();addPart(b.x,b.y,3,'#fff',120);if(e.hp<=0){boom(e.x,e.y);kills++;combo++;comboTimer=2;maxCombo=Math.max(maxCombo,combo);let pts=e.score*(1+Math.floor(combo/10));score+=pts;if(Math.random()<0.18)spawnPowerup(e.x,e.y);updateHUD()}}});
+        if(boss&&!b.dead&&Math.hypot(b.x-boss.x,b.y-boss.y)<boss.r+b.r){b.dead=true;boss.hp--;addPart(b.x,b.y,4,'#fca5a5',150);sHit()}
+      });
+      bullets=bullets.filter(b=>!b.dead);enemies=enemies.filter(e=>e.hp>0);
+      // enemy -> player
+      if(player.alive){
+        enemies.forEach(e=>{if(Math.hypot(e.x-player.x,e.y-player.y)<e.r+player.r-4){e.hp=0;hurtPlayer()}});
+        if(boss&&Math.hypot(boss.x-player.x,boss.y-player.y)<boss.r+player.r)hurtPlayer();
+        ebullets.forEach(b=>{if(Math.hypot(b.x-player.x,b.y-player.y)<b.r+player.r-6){b.dead=true;hurtPlayer()}});
+        ebullets=ebullets.filter(b=>!b.dead);
+        powerups.forEach(pu=>{if(Math.hypot(pu.x-player.x,pu.y-player.y)<pu.r+player.r+4){pu.dead=true;sPick();
+          if(pu.kind==='P'){player.power=Math.min(4,player.power+1);toast('🔥 火力强化 Lv'+player.power)}
+          else if(pu.kind==='S'){player.shield=Math.min(3,player.shield+1);toast('🛡 能量护盾')}
+          else if(pu.kind==='★'){lives=Math.min(5,lives+1);toast('♥ 生命 +1')}
+          else{explodeBomb()}
+          updateHUD()}});
+        powerups=powerups.filter(p=>!p.dead);
+      }
+      powerups.forEach(p=>{p.y+=p.vy*dt;p.t+=dt*4;p.x+=Math.sin(p.t)*20*dt});powerups=powerups.filter(p=>p.y<H+30);
+      if(comboTimer>0){comboTimer-=dt;if(comboTimer<=0)combo=0}
+    }
+    // draw entities
+    bullets.forEach(b=>{ctx.shadowBlur=10;ctx.shadowColor='#fde047';ctx.fillStyle='#fef9c3';ctx.beginPath();ctx.ellipse(b.x,b.y,3.5,10,0,0,7);ctx.fill()});
+    ebullets.forEach(b=>{ctx.shadowBlur=10;ctx.shadowColor='#ef4444';ctx.fillStyle='#fca5a5';ctx.beginPath();ctx.arc(b.x,b.y,b.r,0,7);ctx.fill()});
+    enemies.forEach(drawEnemy);
+    drawBoss();
+    powerups.forEach(p=>{
+      let colors={P:'#f472b6',S:'#22d3ee','★':'#facc15',B:'#a3e635'};
+      ctx.save();ctx.translate(p.x,p.y+Math.sin(p.t)*3);ctx.shadowBlur=15;ctx.shadowColor=colors[p.kind];ctx.fillStyle=colors[p.kind];ctx.strokeStyle='#fff';ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,0,p.r,0,7);ctx.fill();ctx.stroke();
+      ctx.fillStyle='#030712';ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(p.kind,0,1);ctx.restore();
+    });
+    parts.forEach(pt=>{pt.x+=pt.vx*dt;pt.y+=pt.vy*dt;pt.vx*=0.96;pt.vy*=0.96;pt.life-=dt;ctx.globalAlpha=Math.max(0,pt.life/pt.max);ctx.fillStyle=pt.color;ctx.beginPath();ctx.arc(pt.x,pt.y,pt.r,0,7);ctx.fill()});
+    parts=parts.filter(p=>p.life>0);ctx.globalAlpha=1;
+    drawPlayer();
+    if(combo>=5){ctx.fillStyle='#facc15';ctx.font='900 18px monospace';ctx.textAlign='left';ctx.shadowBlur=10;ctx.shadowColor='#f97316';ctx.fillText('COMBO x'+combo,16,H-70)}
+  } else {
+    // menu flyby animation: idle player
+    time+=dt;if(!player){player={x:W/2,y:H-140,r:16,speed:380,power:1,shield:0,invuln:0,alive:true,tilt:0}}
+    player.x=W/2+Math.sin(time)*40;player.y=H-150+Math.sin(time*1.4)*10;drawPlayer();
+  }
+  ctx.restore();
+}
+resize();reset();player.alive=true;requestAnimationFrame(loop);
+// prevent scroll on touch
+addEventListener('touchmove',e=>{if(e.target===canvas)e.preventDefault()},{passive:false});
+</script>
+</body>
+</html>
